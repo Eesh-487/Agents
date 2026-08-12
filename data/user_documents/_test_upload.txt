@@ -1,0 +1,5 @@
+NimbusPay Incident Response Addendum
+
+The Information Security team must notify the Compliance department within
+24 hours of any confirmed data breach. This addendum does not yet specify
+timelines for notifying affected customers or regulatory authorities.

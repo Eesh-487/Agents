@@ -1,0 +1,30 @@
+[
+  {
+    "id": "suggestion-gap-data-protection-impact-assessment",
+    "gap_id": "gap-data-protection-impact-assessment",
+    "gap_title": "No control or process for Data Protection Impact Assessment",
+    "severity": "high",
+    "operation": "insert_after",
+    "anchor_excerpt": "8.2 This policy does not currently designate a named Data Protection Officer responsible for overseeing NimbusPay's compliance with applicable data protection law.",
+    "suggested_text": "8.3 The Data Protection Officer shall be responsible for conducting Data Protection Impact Assessments, in accordance with applicable law, to identify and mitigate potential risks to personal data. The Data Protection Officer shall establish a process for Data Protection Impact Assessments, which shall include procedures for identifying high-risk processing, timelines for conducting assessments, and criteria for determining the level of risk associated with each processing activity.",
+    "final_text": "8.3 The Data Protection Officer shall be responsible for conducting Data Protection Impact Assessments, in accordance with applicable law, to identify and mitigate potential risks to personal data. The Data Protection Officer shall establish a process for Data Protection Impact Assessments, which shall include procedures for identifying high-risk processing, timelines for conducting assessments, and criteria for determining the level of risk associated with each processing activity.",
+    "rationale": "This addresses the gap by designating a Data Protection Officer responsible for conducting Data Protection Impact Assessments and establishing a process for these assessments, as required by the cited law section.",
+    "verifier_confidence": 0.9,
+    "status": "pending",
+    "created_at": "2026-08-12T16:16:50.372793+00:00"
+  },
+  {
+    "id": "suggestion-gap-data-privacy-policy",
+    "gap_id": "gap-data-privacy-policy",
+    "gap_title": "Data privacy policy does not ensure completeness, accuracy, and consistency of personal data",
+    "severity": "medium",
+    "operation": "replace",
+    "anchor_excerpt": "The Compliance department owns the Consent Management Control, which governs how and when consent is collected from Data Principals prior to processing their personal data.",
+    "suggested_text": "The Compliance department also ensures the completeness, accuracy, and consistency of personal data collected prior to processing, and implements controls to prevent data inaccuracies or omissions.",
+    "final_text": "The Compliance department also ensures the completeness, accuracy, and consistency of personal data collected prior to processing, and implements controls to prevent data inaccuracies or omissions.",
+    "rationale": "This addresses the gap by specifying the Compliance department's responsibility to ensure the completeness, accuracy, and consistency of personal data, which is essential for making decisions that affect the data principal or disclosed to another data principal.",
+    "verifier_confidence": 0.9,
+    "status": "pending",
+    "created_at": "2026-08-12T16:19:17.522624+00:00"
+  }
+]

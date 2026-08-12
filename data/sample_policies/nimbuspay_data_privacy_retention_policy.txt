@@ -1,0 +1,98 @@
+NimbusPay Technologies Pvt Ltd
+Data Privacy and Retention Policy
+Document ID: NPT-POL-DP-01 | Version 2.1 | Effective Date: 2025-01-15
+
+1. PURPOSE AND SCOPE
+
+This policy governs how NimbusPay Technologies Pvt Ltd ("NimbusPay"), a digital
+lending and payments platform operating in India, collects, processes, stores,
+and retains personal data belonging to customers, loan applicants, and
+platform users. It applies to all employees, contractors, and third-party
+vendors who process personal data on NimbusPay's behalf.
+
+2. DEFINITIONS
+
+"Personal Data" means any data about an individual who is identifiable by or
+in relation to such data, including name, contact details, financial
+information, KYC documents, and transaction history.
+
+"Data Principal" means the individual to whom the personal data relates.
+
+"Processing" means any operation performed on personal data, including
+collection, storage, use, disclosure, or erasure.
+
+3. DATA COLLECTION PRINCIPLES
+
+3.1 NimbusPay collects only the personal data necessary to provide lending
+and payment services, including KYC verification, credit assessment, and
+transaction processing.
+
+3.2 The Product Engineering department is responsible for ensuring that data
+collection forms and APIs do not request data beyond what is specified in
+this policy.
+
+3.3 The Compliance department owns the Consent Management Control, which
+governs how and when consent is collected from Data Principals prior to
+processing their personal data.
+
+4. DATA RETENTION
+
+4.1 Customer KYC documents and transaction records are retained for a period
+of 8 years from the date of account closure, in line with RBI recordkeeping
+norms for regulated lending entities.
+
+4.2 Marketing and analytics data collected through the mobile application is
+retained for 24 months from the date of collection, after which it is
+anonymized.
+
+4.3 The Data Engineering department owns the Data Retention Control, which is
+implemented through automated deletion jobs running on the customer data
+warehouse.
+
+5. DATA SUBJECT RIGHTS
+
+5.1 Data Principals may request access to, correction of, or erasure of their
+personal data by submitting a request through the NimbusPay support portal.
+
+5.2 The Customer Support department is responsible for triaging and
+forwarding data subject requests to the Compliance department within 3
+business days.
+
+5.3 The Compliance department owns the Data Subject Request Handling
+Process, which coordinates the response across Data Engineering, Product
+Engineering, and Customer Support.
+
+6. DATA SECURITY AND BREACH NOTIFICATION
+
+6.1 The Information Security department owns the Data Encryption Control,
+which mandates encryption of personal data at rest and in transit across all
+NimbusPay systems.
+
+6.2 In the event of a data breach involving personal data, the Information
+Security department is responsible for initiating the Incident Response
+Process and notifying the Compliance department within 24 hours of
+detection.
+
+6.3 NimbusPay does not currently maintain a documented process for notifying
+affected Data Principals or regulators following a confirmed data breach.
+
+7. THIRD-PARTY AND CROSS-BORDER DATA SHARING
+
+7.1 Personal data may be shared with third-party credit bureaus and payment
+processors strictly for the purposes described in Section 1.
+
+7.2 The Vendor Management Control, owned by the Compliance department,
+requires all third-party vendors handling personal data to sign a data
+processing agreement prior to onboarding.
+
+7.3 NimbusPay does not currently restrict which countries customer data may
+be transferred to when using cloud infrastructure providers.
+
+8. GOVERNANCE
+
+8.1 The Compliance department is the designated owner of this policy and is
+responsible for its periodic review, at minimum on an annual basis.
+
+8.2 This policy does not currently designate a named Data Protection Officer
+responsible for overseeing NimbusPay's compliance with applicable data
+protection law.
