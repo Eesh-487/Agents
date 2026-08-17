@@ -36,6 +36,7 @@ MAX_MERGE_ATTEMPTS = 3
 
 class GapAnalysisState(TypedDict, total=False):
     law_collection: str
+    cancel_event: object
     graph_entities: list
     graph_relationships: list
     company_to_law_gaps: list
@@ -75,7 +76,7 @@ def company_to_law_node(state: GapAnalysisState) -> dict:
             entity_relationships_json=json.dumps(_entity_relationships(entity["id"], state["graph_relationships"]), indent=2),
             retrieved_law_chunks=retrieved_text,
         )
-        verdict, error = call_agent_for_json(agent, prompt)
+        verdict, error = call_agent_for_json(agent, prompt, cancel_event=state.get("cancel_event"))
         if error is not None:
             print(f"[company_to_law] entity '{entity['id']}' skipped after error: {error}")
             continue
@@ -121,7 +122,7 @@ def law_to_company_node(state: GapAnalysisState) -> dict:
             all_entities_json=entities_json,
             all_relationships_json=relationships_json,
         )
-        result, error = call_agent_for_json(agent, prompt)
+        result, error = call_agent_for_json(agent, prompt, cancel_event=state.get("cancel_event"))
         if error is not None:
             failed_batches += 1
             print(f"[law_to_company] batch {i} skipped after error: {error}")
@@ -168,7 +169,7 @@ def merge_node(state: GapAnalysisState) -> dict:
     if state.get("merge_feedback"):
         prompt += f"\n\nPrevious merge attempt was rejected for this reason - fix it: {state['merge_feedback']}"
 
-    result, error = call_agent_for_json(agent, prompt)
+    result, error = call_agent_for_json(agent, prompt, cancel_event=state.get("cancel_event"))
     if error is not None:
         print(f"[merge] failed: {error}")
         return {"final_gaps": [], "merge_attempts": state.get("merge_attempts", 0) + 1, "merge_error": error}
@@ -230,10 +231,11 @@ def _build_graph():
 _compiled_graph = _build_graph()
 
 
-def run_gap_analysis(law_collection="dpdp_act_2023"):
+def run_gap_analysis(law_collection="dpdp_act_2023", cancel_event=None):
     graph_data = graph_db.get_full_graph()
     initial_state: GapAnalysisState = {
         "law_collection": law_collection,
+        "cancel_event": cancel_event,
         "graph_entities": graph_data["entities"],
         "graph_relationships": graph_data["relationships"],
         "company_to_law_gaps": [],

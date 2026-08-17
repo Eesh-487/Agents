@@ -13,10 +13,10 @@ from set4_remediation import version_store
 FINAL_DRAFT_OVERRIDE_PATH = "data/remediation/final_draft_override.txt"
 
 
-def draft_remediation():
+def draft_remediation(cancel_event=None):
     """Runs Set 3 fresh, then drafts an inline suggestion for every gap found."""
-    gap_result = run_gap_analysis()
-    drafted = suggestions_module.generate_suggestions(gap_result["final_gaps"])
+    gap_result = run_gap_analysis(cancel_event=cancel_event)
+    drafted = suggestions_module.generate_suggestions(gap_result["final_gaps"], cancel_event=cancel_event)
     return {
         "gap_count": gap_result["gap_count"],
         "suggestion_count": len(drafted),

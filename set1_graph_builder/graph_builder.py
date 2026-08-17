@@ -95,7 +95,7 @@ def _drop_invalid_relationships(entities, relationships):
     return kept
 
 
-def extract_graph(policy_text, feedback="None."):
+def extract_graph(policy_text, feedback="None.", cancel_event=None):
     """Generator agent: extracts entities + relationships as JSON. Retries on
     parse failure - a real, observed failure mode with smaller models (they
     sometimes forget to escape quotes inside verbatim excerpts). `feedback` can
@@ -112,7 +112,7 @@ def extract_graph(policy_text, feedback="None."):
         # was trying to fix. Low but nonzero to preserve retry-to-retry adaptability.
         agent = chatbot(system=GRAPH_EXTRACTOR_SYSTEM_PROMPT, max_tokens=4000, temperature=0.2)
         prompt = GRAPH_EXTRACTOR_USER_TEMPLATE.format(policy_text=policy_text, feedback=feedback)
-        data, error = call_agent_for_json(agent, prompt)
+        data, error = call_agent_for_json(agent, prompt, cancel_event=cancel_event)
         if error is None and data is not None and "entities" in data and "relationships" in data:
             return data["entities"], data["relationships"]
         error = error or "response was missing 'entities' or 'relationships'"
@@ -124,19 +124,19 @@ def extract_graph(policy_text, feedback="None."):
     raise RuntimeError("Entity/relationship extraction failed to produce valid JSON after retries.")
 
 
-def verify_graph(policy_text, entities, relationships):
+def verify_graph(policy_text, entities, relationships, cancel_event=None):
     """LLM judge agent. Advisory, not authoritative - see structural_rules.py
     for the actual source of truth. Returns (accepted, critique, confidence)."""
     agent = chatbot(system=GRAPH_VERIFIER_SYSTEM_PROMPT, model=DISCRIMINATOR_MODEL, temperature=0.0)
     graph_json = json.dumps({"entities": entities, "relationships": relationships}, indent=2)
     prompt = GRAPH_VERIFIER_USER_TEMPLATE.format(policy_text=policy_text, graph_json=graph_json)
-    verdict, error = call_agent_for_json(agent, prompt)
+    verdict, error = call_agent_for_json(agent, prompt, cancel_event=cancel_event)
     if error is not None:
         return False, f"Verifier output could not be parsed: {error}", 0.0
     return verdict.get("accepted", False), verdict.get("critique", ""), float(verdict.get("confidence", 0.0))
 
 
-def build_graph(policy_path):
+def build_graph(policy_path, cancel_event=None):
     with open(policy_path, "r", encoding="utf-8") as f:
         policy_text = f.read()
 
@@ -147,7 +147,7 @@ def build_graph(policy_path):
         print(f"--- Build attempt {build_attempt}/{MAX_BUILD_ATTEMPTS} ---")
 
         print("Extracting entities and relationships...")
-        entities, relationships = extract_graph(policy_text, feedback=feedback)
+        entities, relationships = extract_graph(policy_text, feedback=feedback, cancel_event=cancel_event)
         relationships = _normalize_relationship_types(relationships)
         relationships = _synthesize_owner_relationships(entities, relationships)
         relationships = _drop_invalid_relationships(entities, relationships)
@@ -158,7 +158,9 @@ def build_graph(policy_path):
         print(f"Structural check: {'PASSED' if rules_passed else 'FAILED'} - {rules_explanation}")
 
         print("Running LLM verifier agent...")
-        verifier_accepted, critique, confidence = verify_graph(policy_text, entities, relationships)
+        verifier_accepted, critique, confidence = verify_graph(
+            policy_text, entities, relationships, cancel_event=cancel_event
+        )
         print(f"Verifier: accepted={verifier_accepted} confidence={confidence:.2f} critique={critique}")
 
         # Rules are the actual source of truth (per your call earlier): they gate

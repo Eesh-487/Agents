@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import graph_db
+import jobs
 from set1_graph_builder import graph_builder
 from set2_law_monitor import document_ingest, law_ingest
 from set3_gap_analysis import gap_analysis
@@ -14,14 +15,21 @@ from set4_remediation import remediation, version_store
 app = FastAPI(title="Compliance Memory System")
 
 # Local React dev servers (Vite's default port + the common CRA fallback),
-# plus the deployed Vercel frontend - without this, the browser blocks every
-# request before it even reaches these endpoints.
+# plus every real deployed Vercel origin - without this, the browser blocks
+# every request before it even reaches these endpoints. The regex alone
+# only matches hash-based preview URLs (frontend-<hash>-eesh-487s-projects
+# .vercel.app) - it does NOT match the bare production URL (no hash) or a
+# custom alias, so those need to be listed explicitly. Confirmed via
+# `vercel alias ls` on the "frontend" project - update this list if new
+# aliases are added there.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
         "https://frontend-delta-mauve-ah93snc1ai.vercel.app",
+        "https://frontend-eesh-487s-projects.vercel.app",
+        "https://complianceconsole.vercel.app",
     ],
     allow_origin_regex=r"https://frontend-.*-eesh-487s-projects\.vercel\.app",
     allow_methods=["*"],
@@ -36,26 +44,31 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/graph-builder/run")
+@app.post("/graph-builder/run", status_code=202)
 def run_graph_builder():
     """Set 1: extract entities/relationships from the current (git-backed,
     possibly remediated) policy doc, verify, and write to Neo4j. Reads from
     version_store's live policy file, not the static original sample - so
-    this correctly re-reflects whatever Set 4 has committed."""
+    this correctly re-reflects whatever Set 4 has committed.
+
+    Runs as a background job rather than blocking the request: this can
+    take several build-attempt retries, each with multiple LLM calls, and a
+    single HTTP connection held open that long is fragile to any
+    intermediary (tunnel, mobile NAT, proxy) with its own idle timeout -
+    the frontend polls GET /jobs/{job_id} instead."""
     try:
         version_store.ensure_repo_initialized()
-        return graph_builder.build_graph(version_store.POLICY_FILE_PATH)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+    job_id = jobs.start_job("graph-builder", graph_builder.build_graph, version_store.POLICY_FILE_PATH)
+    return {"job_id": job_id}
 
 
-@app.post("/law-ingest/run")
+@app.post("/law-ingest/run", status_code=202)
 def run_law_ingest():
     """Set 2: chunk, embed, and ingest the DPDP Act 2023 text into Chroma."""
-    try:
-        return law_ingest.ingest()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    job_id = jobs.start_job("law-ingest", law_ingest.ingest)
+    return {"job_id": job_id}
 
 
 @app.get("/graph")
@@ -92,16 +105,14 @@ def ingest_user_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@app.post("/gap-analysis/run")
+@app.post("/gap-analysis/run", status_code=202)
 def run_gap_analysis():
     """Set 3: compare the company's Neo4j graph against ingested law text in
     both directions (existing controls vs. law, and law vs. missing
     controls), merge into one final gap list, gated by a deterministic
     citation-validity check."""
-    try:
-        return gap_analysis.run_gap_analysis()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    job_id = jobs.start_job("gap-analysis", gap_analysis.run_gap_analysis)
+    return {"job_id": job_id}
 
 
 class SuggestionUpdate(BaseModel):
@@ -113,15 +124,34 @@ class FinalDraftUpdate(BaseModel):
     text: str
 
 
-@app.post("/remediation/draft")
+@app.post("/remediation/draft", status_code=202)
 def run_remediation_draft():
     """Set 4: runs Set 3 fresh, then drafts a grounded, verified inline
     suggestion for every gap found - anchored to verbatim text from the
     real policy document so a frontend can render it as an inline diff."""
-    try:
-        return remediation.draft_remediation()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    job_id = jobs.start_job("remediation-draft", remediation.draft_remediation)
+    return {"job_id": job_id}
+
+
+@app.get("/jobs/{job_id}")
+def get_job_status(job_id: str):
+    """Frontend polls this instead of holding one long HTTP request open for
+    a /*/run call - see jobs.py for why. status is one of: running,
+    cancelling, cancelled, done, failed."""
+    status = jobs.get_status(job_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail=f"Unknown job_id '{job_id}'")
+    return status
+
+
+@app.post("/jobs/{job_id}/cancel")
+def cancel_job(job_id: str):
+    """Flips the job's cooperative cancel flag, checked between LLM calls
+    (see json_utils.call_agent_for_json) - stops the run at the next
+    checkpoint rather than letting it burn through the remaining retries."""
+    if not jobs.cancel_job(job_id):
+        raise HTTPException(status_code=404, detail=f"Unknown job_id '{job_id}'")
+    return {"status": "cancelling"}
 
 
 @app.get("/remediation/suggestions")

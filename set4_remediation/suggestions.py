@@ -39,7 +39,7 @@ def clear_suggestions():
     _save_suggestions([])
 
 
-def draft_suggestion_for_gap(gap, policy_text):
+def draft_suggestion_for_gap(gap, policy_text, cancel_event=None):
     """Generator -> discriminator -> deterministic rules-check for one gap.
     Returns a suggestion dict, or None if no valid, grounded draft could be
     produced after retries (logged, not silently skipped)."""
@@ -49,7 +49,7 @@ def draft_suggestion_for_gap(gap, policy_text):
         prompt = POLICY_DRAFTER_USER_TEMPLATE.format(
             gap_json=json.dumps(gap, indent=2), policy_text=policy_text, feedback=feedback
         )
-        draft, error = call_agent_for_json(agent, prompt)
+        draft, error = call_agent_for_json(agent, prompt, cancel_event=cancel_event)
 
         if error is not None:
             feedback = f"Your previous output could not be parsed: {error}"
@@ -70,7 +70,7 @@ def draft_suggestion_for_gap(gap, policy_text):
             draft_json=json.dumps(draft, indent=2),
             policy_text=policy_text,
         )
-        verdict, verror = call_agent_for_json(verifier_agent, verifier_prompt)
+        verdict, verror = call_agent_for_json(verifier_agent, verifier_prompt, cancel_event=cancel_event)
         if verror is not None:
             feedback = f"Verifier could not be reached: {verror}"
             print(f"[suggestions] gap '{gap.get('id')}' attempt {attempt}: {feedback}")
@@ -101,13 +101,13 @@ def draft_suggestion_for_gap(gap, policy_text):
     return None
 
 
-def generate_suggestions(gaps):
+def generate_suggestions(gaps, cancel_event=None):
     """Drafts a suggestion for every gap, stores the batch (replacing any
     previous pending batch), returns it."""
     policy_text = version_store.read_current_policy()
     suggestions = []
     for gap in gaps:
-        suggestion = draft_suggestion_for_gap(gap, policy_text)
+        suggestion = draft_suggestion_for_gap(gap, policy_text, cancel_event=cancel_event)
         if suggestion is not None:
             suggestions.append(suggestion)
     _save_suggestions(suggestions)

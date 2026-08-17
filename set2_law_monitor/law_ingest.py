@@ -5,6 +5,7 @@ the Chroma collection retrieval.py's hybrid search reads from.
 import re
 
 import vector_store
+from jobs import JobCancelled
 from retrieval import embed_documents
 
 COLLECTION_NAME = "dpdp_act_2023"
@@ -66,7 +67,7 @@ def chunk_by_section(cleaned_text):
     return chunks
 
 
-def ingest():
+def ingest(cancel_event=None):
     with open(SOURCE_PATH, "r", encoding="utf-8") as f:
         raw_text = f.read()
 
@@ -80,6 +81,9 @@ def ingest():
         {"section": chunk["section"], "act": "Digital Personal Data Protection Act, 2023", "source": "meity.gov.in"}
         for chunk in chunks
     ]
+
+    if cancel_event is not None and cancel_event.is_set():
+        raise JobCancelled("Stopped before embedding.")
 
     print("Embedding chunks...")
     embeddings = embed_documents(documents)
