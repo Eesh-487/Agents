@@ -45,7 +45,7 @@ def draft_suggestion_for_gap(gap, policy_text, cancel_event=None):
     produced after retries (logged, not silently skipped)."""
     feedback = "None."
     for attempt in range(1, MAX_DRAFT_ATTEMPTS + 1):
-        agent = chatbot(system=POLICY_DRAFTER_SYSTEM_PROMPT, temperature=0.3, max_tokens=800)
+        agent = chatbot(system=POLICY_DRAFTER_SYSTEM_PROMPT, temperature=0.3, max_tokens=800, cancel_event=cancel_event)
         prompt = POLICY_DRAFTER_USER_TEMPLATE.format(
             gap_json=json.dumps(gap, indent=2), policy_text=policy_text, feedback=feedback
         )
@@ -64,7 +64,7 @@ def draft_suggestion_for_gap(gap, policy_text, cancel_event=None):
             print(f"[suggestions] gap '{gap.get('id')}' attempt {attempt}: anchor not found in document")
             continue
 
-        verifier_agent = chatbot(system=DRAFT_VERIFIER_SYSTEM_PROMPT, model=DISCRIMINATOR_MODEL, temperature=0.0)
+        verifier_agent = chatbot(system=DRAFT_VERIFIER_SYSTEM_PROMPT, model=DISCRIMINATOR_MODEL, temperature=0.0, cancel_event=cancel_event)
         verifier_prompt = DRAFT_VERIFIER_USER_TEMPLATE.format(
             gap_json=json.dumps(gap, indent=2),
             draft_json=json.dumps(draft, indent=2),

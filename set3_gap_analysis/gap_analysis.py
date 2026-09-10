@@ -70,7 +70,7 @@ def company_to_law_node(state: GapAnalysisState) -> dict:
         if not retrieved_text:
             continue
 
-        agent = chatbot(system=COMPANY_TO_LAW_SYSTEM_PROMPT, temperature=0.2)
+        agent = chatbot(system=COMPANY_TO_LAW_SYSTEM_PROMPT, temperature=0.2, cancel_event=state.get("cancel_event"))
         prompt = COMPANY_TO_LAW_USER_TEMPLATE.format(
             entity_json=json.dumps(entity, indent=2),
             entity_relationships_json=json.dumps(_entity_relationships(entity["id"], state["graph_relationships"]), indent=2),
@@ -116,7 +116,7 @@ def law_to_company_node(state: GapAnalysisState) -> dict:
         # the merge step below is the actual discriminator ("3rd discriminates").
         # Small batch size + this model's low per-minute token cap (6000 TPM
         # on Groq's free tier) don't leave much room - keep batches small.
-        agent = chatbot(system=LAW_TO_COMPANY_SYSTEM_PROMPT, temperature=0.2, max_tokens=1500)
+        agent = chatbot(system=LAW_TO_COMPANY_SYSTEM_PROMPT, temperature=0.2, max_tokens=1500, cancel_event=state.get("cancel_event"))
         prompt = LAW_TO_COMPANY_USER_TEMPLATE.format(
             law_sections_batch=batch_text,
             all_entities_json=entities_json,
@@ -161,7 +161,7 @@ def merge_node(state: GapAnalysisState) -> dict:
     condensed_company_to_law = [_condense_gap_for_merge(g) for g in state.get("company_to_law_gaps", [])]
     condensed_law_to_company = [_condense_gap_for_merge(g) for g in state.get("law_to_company_gaps", [])]
 
-    agent = chatbot(system=GAP_MERGE_SYSTEM_PROMPT, model=DISCRIMINATOR_MODEL, temperature=0.0, max_tokens=3000)
+    agent = chatbot(system=GAP_MERGE_SYSTEM_PROMPT, model=DISCRIMINATOR_MODEL, temperature=0.0, max_tokens=3000, cancel_event=state.get("cancel_event"))
     prompt = GAP_MERGE_USER_TEMPLATE.format(
         company_to_law_gaps_json=json.dumps(condensed_company_to_law, indent=2),
         law_to_company_gaps_json=json.dumps(condensed_law_to_company, indent=2),

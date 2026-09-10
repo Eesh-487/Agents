@@ -110,7 +110,7 @@ def extract_graph(policy_text, feedback="None.", cancel_event=None):
         # document (23/23/18/12), which independently explains orphan and
         # missing-Policy-entity failures on top of whatever the retry feedback
         # was trying to fix. Low but nonzero to preserve retry-to-retry adaptability.
-        agent = chatbot(system=GRAPH_EXTRACTOR_SYSTEM_PROMPT, max_tokens=4000, temperature=0.2)
+        agent = chatbot(system=GRAPH_EXTRACTOR_SYSTEM_PROMPT, max_tokens=4000, temperature=0.2, cancel_event=cancel_event)
         prompt = GRAPH_EXTRACTOR_USER_TEMPLATE.format(policy_text=policy_text, feedback=feedback)
         data, error = call_agent_for_json(agent, prompt, cancel_event=cancel_event)
         if error is None and data is not None and "entities" in data and "relationships" in data:
@@ -127,7 +127,7 @@ def extract_graph(policy_text, feedback="None.", cancel_event=None):
 def verify_graph(policy_text, entities, relationships, cancel_event=None):
     """LLM judge agent. Advisory, not authoritative - see structural_rules.py
     for the actual source of truth. Returns (accepted, critique, confidence)."""
-    agent = chatbot(system=GRAPH_VERIFIER_SYSTEM_PROMPT, model=DISCRIMINATOR_MODEL, temperature=0.0)
+    agent = chatbot(system=GRAPH_VERIFIER_SYSTEM_PROMPT, model=DISCRIMINATOR_MODEL, temperature=0.0, cancel_event=cancel_event)
     graph_json = json.dumps({"entities": entities, "relationships": relationships}, indent=2)
     prompt = GRAPH_VERIFIER_USER_TEMPLATE.format(policy_text=policy_text, graph_json=graph_json)
     verdict, error = call_agent_for_json(agent, prompt, cancel_event=cancel_event)
