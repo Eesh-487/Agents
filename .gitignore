@@ -1,5 +1,3 @@
 .venv
 .env
 __pycache__/
-data/chroma_local/
-data/remediation/suggestions.json
