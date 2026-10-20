@@ -15,14 +15,15 @@ cross-border transfer restriction, no named DPO) are all absences with no
 graph entity to start from, which Company -> Law alone would never surface.
 """
 import json
+import os
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
 import graph_db
 import vector_store
-from json_utils import call_agent_for_json
-from llm import DISCRIMINATOR_MODEL, chatbot
+from json_utils import call_agent_for_json, parse_json_batch
+from llm import DISCRIMINATOR_MODEL, chatbot, generate_batch
 from Prompts.company_to_law import COMPANY_TO_LAW_SYSTEM_PROMPT, COMPANY_TO_LAW_USER_TEMPLATE
 from Prompts.gap_merge import GAP_MERGE_SYSTEM_PROMPT, GAP_MERGE_USER_TEMPLATE
 from Prompts.law_to_company import LAW_TO_COMPANY_SYSTEM_PROMPT, LAW_TO_COMPANY_USER_TEMPLATE
@@ -30,8 +31,38 @@ from retrieval import hybrid_search
 from set3_gap_analysis.gap_rules import check_gap_list
 
 COMPANY_ENTITY_TYPES = {"Control", "Policy", "Process"}
-LAW_SECTION_BATCH_SIZE = 3
+# Sections per law_to_company call. Was 3, sized for Groq's free-tier 6000
+# TPM cap - that limit disappeared with the move to local MLX weights, and 3
+# meant 15 separate calls over a 43-section Act. Bounded now only by keeping
+# the prompt comfortably inside context.
+LAW_SECTION_BATCH_SIZE = 12
 MAX_MERGE_ATTEMPTS = 3
+
+# Set 3's result is persisted so Set 4 can consume the gaps that were already
+# computed instead of re-running this whole graph. Set 4 used to call
+# run_gap_analysis() again on every draft, duplicating the single most
+# expensive stage in the pipeline for an identical answer.
+GAPS_PATH = "data/gap_analysis/gaps.json"
+
+
+def save_gap_result(result):
+    os.makedirs(os.path.dirname(GAPS_PATH), exist_ok=True)
+    with open(GAPS_PATH, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2)
+
+
+def load_gap_result():
+    """Returns the last persisted Set 3 result, or None if there isn't one
+    (or it's unreadable - a corrupt cache must trigger a fresh run, never an
+    empty gap list, which would look like a clean compliance bill of health)."""
+    if not os.path.exists(GAPS_PATH):
+        return None
+    try:
+        with open(GAPS_PATH, "r", encoding="utf-8") as f:
+            result = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+    return result if result.get("final_gaps") else None
 
 
 class GapAnalysisState(TypedDict, total=False):
@@ -59,8 +90,12 @@ def company_to_law_node(state: GapAnalysisState) -> dict:
     """Agent 1: for each existing Control/Policy/Process, retrieve the most
     relevant law text and check whether it's actually satisfied."""
     relevant_entities = [e for e in state["graph_entities"] if e.get("type") in COMPANY_ENTITY_TYPES]
-    gaps = []
 
+    # Retrieval first, for every entity, then ONE batched generation. Each
+    # entity's verdict is independent of the others', so running them as a
+    # sequential loop of single calls paid full decode latency per entity for
+    # no reason - the weights are read once per batch either way.
+    checked_entities, prompts = [], []
     for entity in relevant_entities:
         query = f"{entity.get('name', '')}. {entity.get('description', '')}"
         results = hybrid_search(query, state["law_collection"], top_k=5)
@@ -69,16 +104,26 @@ def company_to_law_node(state: GapAnalysisState) -> dict:
         )
         if not retrieved_text:
             continue
-
-        agent = chatbot(system=COMPANY_TO_LAW_SYSTEM_PROMPT, temperature=0.2, cancel_event=state.get("cancel_event"))
-        prompt = COMPANY_TO_LAW_USER_TEMPLATE.format(
-            entity_json=json.dumps(entity, indent=2),
-            entity_relationships_json=json.dumps(_entity_relationships(entity["id"], state["graph_relationships"]), indent=2),
-            retrieved_law_chunks=retrieved_text,
+        checked_entities.append(entity)
+        prompts.append(
+            COMPANY_TO_LAW_USER_TEMPLATE.format(
+                entity_json=json.dumps(entity, indent=2),
+                entity_relationships_json=json.dumps(_entity_relationships(entity["id"], state["graph_relationships"]), indent=2),
+                retrieved_law_chunks=retrieved_text,
+            )
         )
-        verdict, error = call_agent_for_json(agent, prompt, cancel_event=state.get("cancel_event"))
-        if error is not None:
-            print(f"[company_to_law] entity '{entity['id']}' skipped after error: {error}")
+
+    responses = generate_batch(
+        COMPANY_TO_LAW_SYSTEM_PROMPT,
+        prompts,
+        temperature=0.2,
+        cancel_event=state.get("cancel_event"),
+    )
+
+    gaps = []
+    for entity, (verdict, error) in zip(checked_entities, parse_json_batch(responses)):
+        if error is not None or not isinstance(verdict, dict):
+            print(f"[company_to_law] entity '{entity['id']}' skipped after error: {error or 'malformed response'}")
             continue
 
         if verdict.get("has_gap"):
@@ -92,7 +137,7 @@ def company_to_law_node(state: GapAnalysisState) -> dict:
                 }
             )
 
-    print(f"[company_to_law] checked {len(relevant_entities)} entities, found {len(gaps)} gaps")
+    print(f"[company_to_law] checked {len(checked_entities)} entities, found {len(gaps)} gaps")
     return {"company_to_law_gaps": gaps}
 
 
@@ -103,29 +148,37 @@ def law_to_company_node(state: GapAnalysisState) -> dict:
     entities_json = json.dumps(state["graph_entities"], indent=2)
     relationships_json = json.dumps(state["graph_relationships"], indent=2)
 
-    gaps = []
-    batch_count = 0
-    failed_batches = 0
+    # Generator-tier model, not the discriminator - this is a comparison/
+    # generation task ("2 agents compare"), same as company_to_law. Only the
+    # merge step below is the actual discriminator ("3rd discriminates").
+    prompts = []
     for i in range(0, len(all_chunks), LAW_SECTION_BATCH_SIZE):
-        batch_count += 1
         batch = all_chunks[i : i + LAW_SECTION_BATCH_SIZE]
         batch_text = "\n\n".join(f"[Section {meta.get('section', '?')}]\n{doc}" for _, doc, meta in batch)
-
-        # Generator-tier model, not the discriminator - this is a comparison/
-        # generation task ("2 agents compare"), same as company_to_law. Only
-        # the merge step below is the actual discriminator ("3rd discriminates").
-        # Small batch size + this model's low per-minute token cap (6000 TPM
-        # on Groq's free tier) don't leave much room - keep batches small.
-        agent = chatbot(system=LAW_TO_COMPANY_SYSTEM_PROMPT, temperature=0.2, max_tokens=1500, cancel_event=state.get("cancel_event"))
-        prompt = LAW_TO_COMPANY_USER_TEMPLATE.format(
-            law_sections_batch=batch_text,
-            all_entities_json=entities_json,
-            all_relationships_json=relationships_json,
+        prompts.append(
+            LAW_TO_COMPANY_USER_TEMPLATE.format(
+                law_sections_batch=batch_text,
+                all_entities_json=entities_json,
+                all_relationships_json=relationships_json,
+            )
         )
-        result, error = call_agent_for_json(agent, prompt, cancel_event=state.get("cancel_event"))
-        if error is not None:
+
+    # One batched pass: no section batch's verdict depends on another's.
+    responses = generate_batch(
+        LAW_TO_COMPANY_SYSTEM_PROMPT,
+        prompts,
+        temperature=0.2,
+        max_tokens=1500,
+        cancel_event=state.get("cancel_event"),
+    )
+
+    gaps = []
+    batch_count = len(prompts)
+    failed_batches = 0
+    for index, (result, error) in enumerate(parse_json_batch(responses)):
+        if error is not None or not isinstance(result, dict):
             failed_batches += 1
-            print(f"[law_to_company] batch {i} skipped after error: {error}")
+            print(f"[law_to_company] batch {index} skipped after error: {error or 'malformed response'}")
         else:
             gaps.extend(result.get("gaps", []))
 
@@ -258,7 +311,7 @@ def run_gap_analysis(law_collection="dpdp_act_2023", cancel_event=None):
         # a caller checking only `status` must not mistake this for a clean run.
         status = "completed_with_warnings"
 
-    return {
+    gap_result = {
         "status": status,
         "gap_count": len(result["final_gaps"]),
         "final_gaps": result["final_gaps"],
@@ -267,6 +320,8 @@ def run_gap_analysis(law_collection="dpdp_act_2023", cancel_event=None):
         "law_to_company_batches_failed": f"{failed_batches}/{result.get('law_to_company_total_batches', 0)}",
         "rules_explanation": result["rules_explanation"],
     }
+    save_gap_result(gap_result)
+    return gap_result
 
 
 if __name__ == "__main__":

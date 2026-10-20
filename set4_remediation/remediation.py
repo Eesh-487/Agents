@@ -6,16 +6,30 @@ version_store.py are implementation details underneath it.
 """
 import os
 
-from set3_gap_analysis.gap_analysis import run_gap_analysis
+from set3_gap_analysis.gap_analysis import load_gap_result, run_gap_analysis
 from set4_remediation import suggestions as suggestions_module
 from set4_remediation import version_store
 
 FINAL_DRAFT_OVERRIDE_PATH = "data/remediation/final_draft_override.txt"
 
 
-def draft_remediation(cancel_event=None):
-    """Runs Set 3 fresh, then drafts an inline suggestion for every gap found."""
-    gap_result = run_gap_analysis(cancel_event=cancel_event)
+def draft_remediation(cancel_event=None, force_reanalysis=False):
+    """Drafts an inline suggestion for every gap Set 3 found.
+
+    Reuses the persisted Set 3 result when there is one. This used to call
+    run_gap_analysis() unconditionally, re-running the pipeline's single most
+    expensive stage - every entity check, every law-section pass and the merge
+    - to recompute gaps the user had just generated and was looking at. Set 3
+    only runs here when nothing is cached, or when the caller explicitly asks
+    for a fresh analysis.
+    """
+    gap_result = None if force_reanalysis else load_gap_result()
+    if gap_result is None:
+        print("[remediation] no cached gap analysis - running Set 3")
+        gap_result = run_gap_analysis(cancel_event=cancel_event)
+    else:
+        print(f"[remediation] reusing cached gap analysis ({gap_result['gap_count']} gaps)")
+
     drafted = suggestions_module.generate_suggestions(gap_result["final_gaps"], cancel_event=cancel_event)
     return {
         "gap_count": gap_result["gap_count"],

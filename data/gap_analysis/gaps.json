@@ -1,0 +1,149 @@
+{
+  "status": "completed",
+  "gap_count": 10,
+  "final_gaps": [
+    {
+      "id": "gap-children-personal-data",
+      "title": "Lack of Child Data Processing Controls and Parental Consent",
+      "description": "The knowledge graph has no policies, controls, or processes addressing the processing of personal data of children, verifiable parental consent, or restrictions on child tracking and targeted advertising.",
+      "severity": "critical",
+      "cited_law_sections": [
+        "9"
+      ],
+      "related_entity_ids": [],
+      "recommendation": "Implement policies, verifiable parental consent mechanisms, and restrictions on tracking and targeted advertising for children's data.",
+      "source": "law_to_company"
+    },
+    {
+      "id": "gap-incident-response-notification",
+      "title": "Inadequate Incident Response and Breach Notification Workflow",
+      "description": "The Incident Response Process currently notifies only the Compliance department within 24 hours of detection, but Section 8(6) of the Act requires that in the event of a personal data breach, intimation must also be made directly to the Data Protection Board of India.",
+      "severity": "high",
+      "cited_law_sections": [
+        "8"
+      ],
+      "related_entity_ids": [
+        "process-incident-response",
+        "control-data-encryption"
+      ],
+      "recommendation": "Update the Incident Response Process to include direct mandatory notifications to the Data Protection Board of India alongside internal compliance notifications.",
+      "source": "both"
+    },
+    {
+      "id": "gap-dpia-and-governance-roles",
+      "title": "Missing India-Based DPO and Independent Auditor Appointments",
+      "description": "Although a DPIA control and process exist, the knowledge graph lacks controls or roles dedicated to appointing an India-based Data Protection Officer (DPO) and an independent data auditor as required.",
+      "severity": "high",
+      "cited_law_sections": [
+        "10"
+      ],
+      "related_entity_ids": [
+        "control-data-protection-impact-assessment",
+        "process-data-protection-impact-assessment"
+      ],
+      "recommendation": "Formalize the appointment of an India-based DPO and independent data auditors within the governance framework and related processes.",
+      "source": "law_to_company"
+    },
+    {
+      "id": "gap-consent-notice-mechanism",
+      "title": "Lack of Enforceable Consent Notice Mechanism",
+      "description": "While the requirement and consent management process mention providing a notice, the knowledge graph lacks a dedicated, enforceable control or automated mechanism ensuring that notice is systematically provided.",
+      "severity": "medium",
+      "cited_law_sections": [
+        "5"
+      ],
+      "related_entity_ids": [
+        "requirement-consent-notice",
+        "process-consent-management"
+      ],
+      "recommendation": "Develop automated controls and explicit workflows to systematically deliver and track consent notices.",
+      "source": "law_to_company"
+    },
+    {
+      "id": "gap-dsr-summary-details",
+      "title": "Incomplete Data Subject Access Request Summary Processing",
+      "description": "While a general data subject request response requirement exists, there are no specific workflows or controls ensuring that data subject access requests return the required detailed summary of processing activities.",
+      "severity": "medium",
+      "cited_law_sections": [
+        "11"
+      ],
+      "related_entity_ids": [
+        "requirement-data-subject-request-response",
+        "process-data-subject-request-handling"
+      ],
+      "recommendation": "Enhance DSR handling workflows to automatically aggregate and return detailed summaries of personal data processing.",
+      "source": "law_to_company"
+    },
+    {
+      "id": "gap-data-correction-updating",
+      "title": "Missing Data Correction, Completion, and Updating Controls",
+      "description": "The knowledge graph covers general request response times and event-driven erasure, but lacks specific controls governing data correction, completion, and updating requests from Data Principals.",
+      "severity": "medium",
+      "cited_law_sections": [
+        "12"
+      ],
+      "related_entity_ids": [
+        "requirement-data-subject-request-response",
+        "process-data-subject-request-handling"
+      ],
+      "recommendation": "Establish dedicated policies and technical controls to handle data correction, completion, and updating requests.",
+      "source": "law_to_company"
+    },
+    {
+      "id": "gap-nomination-right",
+      "title": "Lack of Nomination Right Mechanism for Data Principals",
+      "description": "The knowledge graph contains no control, policy, or process addressing the Data Principal's right to nominate an individual to exercise their rights upon death or incapacity.",
+      "severity": "medium",
+      "cited_law_sections": [
+        "14"
+      ],
+      "related_entity_ids": [],
+      "recommendation": "Introduce a nomination workflow allowing Data Principals to designate a representative in the event of death or incapacity.",
+      "source": "law_to_company"
+    },
+    {
+      "id": "gap-government-request-handling-details",
+      "title": "Undefined Central Government Information Request Procedures",
+      "description": "While a process entity ('Central Government Information Request Handling Process') exists in the knowledge graph, there are no detailed operational requirements, controls, or procedures defined for validation and execution.",
+      "severity": "medium",
+      "cited_law_sections": [
+        "36"
+      ],
+      "related_entity_ids": [
+        "process-central-government-information-request-handling"
+      ],
+      "recommendation": "Document standard operating procedures and validation controls for processing Central Government information requests.",
+      "source": "law_to_company"
+    },
+    {
+      "id": "gap-data-principal-duties",
+      "title": "Missing Policies on Statutory Duties of Data Principals",
+      "description": "The knowledge graph lacks any policy or terms provisions outlining or enforcing the statutory duties of Data Principals.",
+      "severity": "low",
+      "cited_law_sections": [
+        "15"
+      ],
+      "related_entity_ids": [],
+      "recommendation": "Update terms of service or privacy policies to incorporate and communicate the statutory duties of Data Principals.",
+      "source": "law_to_company"
+    },
+    {
+      "id": "gap-cross-border-transfer-restrictions",
+      "title": "Insufficient Specificity in Cross-Border Data Transfers",
+      "description": "While a Cross-Border Transfer Control exists, it relies generally on vendor agreements restricting transfer to 'notified countries and territories only' but does not explicitly track or incorporate specific statutory restrictions.",
+      "severity": "low",
+      "cited_law_sections": [
+        "16"
+      ],
+      "related_entity_ids": [
+        "control-cross-border-transfer"
+      ],
+      "recommendation": "Refine cross-border transfer controls to dynamically track and enforce specific notified country lists and restrictions.",
+      "source": "law_to_company"
+    }
+  ],
+  "company_to_law_gap_count": 1,
+  "law_to_company_gap_count": 10,
+  "law_to_company_batches_failed": "0/4",
+  "rules_explanation": "All structural checks passed."
+}

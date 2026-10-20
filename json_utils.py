@@ -53,3 +53,19 @@ def call_agent_for_json(agent, prompt, cancel_event=None):
         return parse_json_lenient(agent(prompt)), None
     except (json.JSONDecodeError, ValueError, TypeError, KeyError, OpenAIError) as exc:
         return None, str(exc)
+
+
+def parse_json_batch(texts):
+    """Parses a list of raw model responses (from llm.generate_batch) the same
+    leniently-as-possible way `call_agent_for_json` parses one. Returns a list
+    of (result, error) pairs positionally matching the input, so one malformed
+    response in a batch never costs the whole batch - the caller retries or
+    skips just that item, which is how every batched stage here degrades.
+    """
+    parsed = []
+    for text in texts:
+        try:
+            parsed.append((parse_json_lenient(text), None))
+        except (json.JSONDecodeError, ValueError, TypeError, KeyError) as exc:
+            parsed.append((None, str(exc)))
+    return parsed

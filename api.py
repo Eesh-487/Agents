@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 import graph_db
 import jobs
+import llm
 from set1_graph_builder import graph_builder
 from set2_law_monitor import document_ingest, law_ingest
 from set3_gap_analysis import gap_analysis
@@ -26,6 +27,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "http://localhost:5174",
         "http://localhost:3000",
         "https://frontend-delta-mauve-ah93snc1ai.vercel.app",
         "https://frontend-eesh-487s-projects.vercel.app",
@@ -42,6 +44,29 @@ USER_DOCUMENTS_DIR = "data/user_documents"
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+class LLMConfig(BaseModel):
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+
+
+@app.get("/llm/config")
+def get_llm_config():
+    """Which LLM the pipeline is using. Never returns the API key."""
+    return llm.remote_config()
+
+
+@app.put("/llm/config")
+def put_llm_config(body: LLMConfig):
+    """Switch every LLM call to an OpenAI-compatible endpoint, or back to
+    local MLX by sending an empty `model`. Applies to jobs started after this."""
+    base_url = body.base_url.strip()
+    if base_url and not base_url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=422, detail="base_url must start with http:// or https://")
+    llm.configure_remote(base_url, body.api_key.strip(), body.model.strip())
+    return llm.remote_config()
 
 
 @app.post("/graph-builder/run", status_code=202)
@@ -187,12 +212,21 @@ def patch_remediation_final_draft(body: FinalDraftUpdate):
 @app.post("/remediation/finalize")
 def finalize_remediation():
     """Commits the current final draft as a new policy version (real git
-    commit), then re-triggers Set 1 to regenerate the graph from it -
-    closing the loop the whole pipeline was built around."""
+    commit). Version control only.
+
+    The Set 1 graph rebuild that used to run inline here has been removed:
+    it made finalizing an open-ended, model-bound request (a full extract ->
+    verify cycle, several minutes on local MLX weights) inside a synchronous
+    endpoint, so a slow or failed rebuild looked like a failed commit even
+    though the commit had already succeeded. Rebuild explicitly via
+    POST /graph-builder/run, which is already a background job with polling.
+    To restore the old behaviour, start that job here rather than calling
+    build_graph inline:
+        job_id = jobs.start_job("graph-builder", graph_builder.build_graph,
+                                version_store.POLICY_FILE_PATH)
+    """
     try:
-        result = remediation.finalize()
-        graph_result = graph_builder.build_graph(version_store.POLICY_FILE_PATH)
-        return {**result, "graph_rebuild": graph_result}
+        return remediation.finalize()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

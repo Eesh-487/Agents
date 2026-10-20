@@ -11,8 +11,8 @@ import json
 import os
 from datetime import datetime, timezone
 
-from json_utils import call_agent_for_json
-from llm import DISCRIMINATOR_MODEL, chatbot
+from json_utils import call_agent_for_json, parse_json_batch
+from llm import DISCRIMINATOR_MODEL, chatbot, generate_batch
 from Prompts.draft_verifier import DRAFT_VERIFIER_SYSTEM_PROMPT, DRAFT_VERIFIER_USER_TEMPLATE
 from Prompts.policy_drafter import POLICY_DRAFTER_SYSTEM_PROMPT, POLICY_DRAFTER_USER_TEMPLATE
 from set4_remediation import version_store
@@ -39,17 +39,28 @@ def clear_suggestions():
     _save_suggestions([])
 
 
-def draft_suggestion_for_gap(gap, policy_text, cancel_event=None):
+def draft_suggestion_for_gap(gap, policy_text, cancel_event=None, prepared_draft=None):
     """Generator -> discriminator -> deterministic rules-check for one gap.
     Returns a suggestion dict, or None if no valid, grounded draft could be
-    produced after retries (logged, not silently skipped)."""
+    produced after retries (logged, not silently skipped).
+
+    `prepared_draft` is a draft already produced by the batched first pass,
+    used in place of attempt 1's drafter call. It still goes through the
+    verifier and the anchor check below - the batch only skips re-generating
+    text that already exists, it never skips a gate. Later attempts fall back
+    to drafting normally, so feedback-driven repair is unchanged.
+    """
     feedback = "None."
     for attempt in range(1, MAX_DRAFT_ATTEMPTS + 1):
-        agent = chatbot(system=POLICY_DRAFTER_SYSTEM_PROMPT, temperature=0.3, max_tokens=800, cancel_event=cancel_event)
-        prompt = POLICY_DRAFTER_USER_TEMPLATE.format(
-            gap_json=json.dumps(gap, indent=2), policy_text=policy_text, feedback=feedback
-        )
-        draft, error = call_agent_for_json(agent, prompt, cancel_event=cancel_event)
+        if prepared_draft is not None:
+            draft, error = prepared_draft, None
+            prepared_draft = None  # first attempt only; retries draft afresh
+        else:
+            agent = chatbot(system=POLICY_DRAFTER_SYSTEM_PROMPT, temperature=0.3, max_tokens=800, cancel_event=cancel_event)
+            prompt = POLICY_DRAFTER_USER_TEMPLATE.format(
+                gap_json=json.dumps(gap, indent=2), policy_text=policy_text, feedback=feedback
+            )
+            draft, error = call_agent_for_json(agent, prompt, cancel_event=cancel_event)
 
         if error is not None:
             feedback = f"Your previous output could not be parsed: {error}"
@@ -64,7 +75,7 @@ def draft_suggestion_for_gap(gap, policy_text, cancel_event=None):
             print(f"[suggestions] gap '{gap.get('id')}' attempt {attempt}: anchor not found in document")
             continue
 
-        verifier_agent = chatbot(system=DRAFT_VERIFIER_SYSTEM_PROMPT, model=DISCRIMINATOR_MODEL, temperature=0.0, cancel_event=cancel_event)
+        verifier_agent = chatbot(system=DRAFT_VERIFIER_SYSTEM_PROMPT, model=DISCRIMINATOR_MODEL, temperature=0.0, reasoning_effort="medium", cancel_event=cancel_event)
         verifier_prompt = DRAFT_VERIFIER_USER_TEMPLATE.format(
             gap_json=json.dumps(gap, indent=2),
             draft_json=json.dumps(draft, indent=2),
@@ -101,13 +112,55 @@ def draft_suggestion_for_gap(gap, policy_text, cancel_event=None):
     return None
 
 
+def _first_pass_drafts(gaps, policy_text, cancel_event=None):
+    """One batched drafting call for all gaps, returning {gap_id: draft} for
+    the drafts that are well-formed AND pass the verbatim-anchor rules check.
+
+    Gaps are independent, so the common case - most drafts land correctly on
+    the first try - costs one batched generation instead of one call per gap.
+    Anything that fails here is not given up on: it falls back to the full
+    per-gap drafter/verifier retry loop, which is where the feedback-driven
+    repair lives. This is a fast path, not a replacement for it.
+    """
+    prompts = [
+        POLICY_DRAFTER_USER_TEMPLATE.format(
+            gap_json=json.dumps(gap, indent=2), policy_text=policy_text, feedback="None."
+        )
+        for gap in gaps
+    ]
+    responses = generate_batch(
+        POLICY_DRAFTER_SYSTEM_PROMPT,
+        prompts,
+        temperature=0.3,
+        max_tokens=800,
+        cancel_event=cancel_event,
+    )
+
+    drafts = {}
+    for gap, (draft, error) in zip(gaps, parse_json_batch(responses)):
+        if error is not None or not isinstance(draft, dict):
+            continue
+        anchor = draft.get("anchor_excerpt", "")
+        # Same rules check as the sequential path: the anchor has to be real,
+        # verbatim document text. A batched draft gets no weaker a gate.
+        if anchor and anchor in policy_text:
+            drafts[gap["id"]] = draft
+    return drafts
+
+
 def generate_suggestions(gaps, cancel_event=None):
     """Drafts a suggestion for every gap, stores the batch (replacing any
     previous pending batch), returns it."""
     policy_text = version_store.read_current_policy()
+
+    first_pass = _first_pass_drafts(gaps, policy_text, cancel_event=cancel_event) if gaps else {}
+    print(f"[suggestions] batched first pass produced {len(first_pass)}/{len(gaps)} grounded drafts")
+
     suggestions = []
     for gap in gaps:
-        suggestion = draft_suggestion_for_gap(gap, policy_text, cancel_event=cancel_event)
+        suggestion = draft_suggestion_for_gap(
+            gap, policy_text, cancel_event=cancel_event, prepared_draft=first_pass.get(gap["id"])
+        )
         if suggestion is not None:
             suggestions.append(suggestion)
     _save_suggestions(suggestions)
