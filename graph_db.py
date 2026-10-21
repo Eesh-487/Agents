@@ -19,6 +19,11 @@ def get_driver():
     return _driver
 
 
+def verify_connectivity():
+    """Raises if Neo4j is unreachable or the credentials are wrong."""
+    get_driver().verify_connectivity()
+
+
 def close_driver():
     global _driver
     if _driver is not None:

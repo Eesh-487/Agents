@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import graph_db
 import jobs
 import llm
+import vector_store
 from set1_graph_builder import graph_builder
 from set2_law_monitor import document_ingest, law_ingest
 from set3_gap_analysis import gap_analysis
@@ -44,6 +45,25 @@ USER_DOCUMENTS_DIR = "data/user_documents"
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/health/dependencies")
+def health_dependencies():
+    """Readiness check for the external services: Neo4j, Chroma (cloud or the
+    local fallback) and which LLM is configured. /health stays a cheap
+    liveness probe; this one makes real network calls."""
+    status = {}
+    try:
+        graph_db.verify_connectivity()
+        status["neo4j"] = {"ok": True}
+    except Exception as exc:
+        status["neo4j"] = {"ok": False, "error": str(exc)}
+    try:
+        status["chroma"] = {"ok": True, "cloud": vector_store.is_using_cloud()}
+    except Exception as exc:
+        status["chroma"] = {"ok": False, "error": str(exc)}
+    status["llm"] = llm.remote_config()
+    return status
 
 
 class LLMConfig(BaseModel):

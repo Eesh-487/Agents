@@ -122,3 +122,13 @@ dependencies = [
 dev = [
     "pytest>=9.1.1",
 ]
+
+# CPU-only torch: deploy hosts have no GPU, and the default PyPI Linux wheel
+# pulls several GB of CUDA libraries. macOS keeps PyPI (no CPU variant there).
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform != 'darwin'" }]

@@ -61,6 +61,14 @@ def configure_remote(base_url, api_key, model):
                               has_key=bool(api_key))
 
 
+# Hosts without Apple Silicon (any cloud deploy) can't run MLX, and the
+# PUT /llm/config setting above is lost on every restart - so the hosted
+# endpoint can also be set at startup from env. The frontend can still
+# override it at runtime.
+if os.getenv("LLM_MODEL"):
+    configure_remote(os.getenv("LLM_BASE_URL", ""), os.getenv("LLM_API_KEY", ""), os.getenv("LLM_MODEL"))
+
+
 def remote_config():
     if _remote is None:
         return {"provider": "local", "model": GENERATOR_MODEL}

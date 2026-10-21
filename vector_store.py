@@ -1,3 +1,5 @@
+import os
+
 import chromadb
 from dotenv import load_dotenv
 
@@ -22,6 +24,8 @@ def get_client():
     replica's writes land in its own local store instead of the shared cloud
     one - other replicas won't see them. Watch the printed warning below;
     don't assume data is in the cloud store just because it was written.
+    Deployments set CHROMA_REQUIRE_CLOUD=true to fail loudly instead, since
+    their local disk is ephemeral and the fallback would silently lose data.
     """
     global _client, _using_cloud
     if _client is not None:
@@ -33,6 +37,8 @@ def get_client():
         _client = candidate
         _using_cloud = True
     except Exception as exc:
+        if os.getenv("CHROMA_REQUIRE_CLOUD", "").lower() == "true":
+            raise RuntimeError(f"Chroma Cloud unavailable and CHROMA_REQUIRE_CLOUD is set: {exc}") from exc
         print(f"[vector_store] Chroma Cloud unavailable ({exc}) - falling back to local Chroma at '{_LOCAL_PATH}'.")
         _client = chromadb.PersistentClient(path=_LOCAL_PATH)
         _using_cloud = False

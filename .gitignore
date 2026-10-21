@@ -3,3 +3,4 @@
 __pycache__/
 # Runtime policy version store (its own git repo, created by set4_remediation/version_store.py)
 data/policy_versions/
+data/chroma_local/

@@ -1,0 +1,7 @@
+.git
+.venv
+.env
+.claude
+**/__pycache__
+data/chroma_local
+data/policy_versions
