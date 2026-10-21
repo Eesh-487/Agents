@@ -1,3 +1,5 @@
 .venv
 .env
 __pycache__/
+# Runtime policy version store (its own git repo, created by set4_remediation/version_store.py)
+data/policy_versions/
