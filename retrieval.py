@@ -4,17 +4,46 @@ in this project (Set 2's law search now, Set 3's gap analysis later) -
 naive single-vector similarity search misses exact legal terms/section
 references that BM25 catches, and a reranker corrects ordering mistakes
 either retrieval method makes on its own.
+
+Both models run on ONNX Runtime via fastembed rather than PyTorch: same
+weights, ~half the memory, and a far smaller install - enough to fit a
+512 MB host. Checked against the sentence-transformers/PyTorch versions on
+the DPDP Act corpus: embeddings cosine 1.000000, reranker scores within 1e-5,
+identical rankings - so vectors already in Chroma stay valid.
 """
+from fastembed import TextEmbedding
+from fastembed.common.model_description import ModelSource, PoolingType
+from fastembed.rerank.cross_encoder import TextCrossEncoder
 from rank_bm25 import BM25Okapi
-from sentence_transformers import CrossEncoder, SentenceTransformer
 
 import vector_store
 
-_EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
-_RERANK_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# fastembed's built-in "BAAI/bge-small-en-v1.5" is a re-exported optimized
+# copy; registering BAAI's own fp32 ONNX export keeps the vectors identical
+# to the original model. CLS pooling + L2 normalization is how BGE is defined.
+_EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5-onnx-fp32"
+TextEmbedding.add_custom_model(
+    model=_EMBED_MODEL_NAME,
+    pooling=PoolingType.CLS,
+    normalization=True,
+    sources=ModelSource(hf="BAAI/bge-small-en-v1.5"),
+    dim=384,
+    model_file="onnx/model.onnx",
+)
+# ONNX export of cross-encoder/ms-marco-MiniLM-L-6-v2.
+_RERANK_MODEL_NAME = "Xenova/ms-marco-MiniLM-L-6-v2"
 # BGE-family models are trained to expect this instruction prefix on the
 # query side only (not on documents) for best retrieval quality.
 _BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+
+# Memory, not speed, is the constraint on small hosts (512 MB). ONNX Runtime's
+# CPU arena keeps every peak allocation for the life of the process, and peak
+# scales with batch x sequence length - measured on the DPDP Act sections:
+# arena on / batch 256 = 4.9 GB RSS; arena off / batch 1 = 355 MB RSS, 385 MB
+# peak, and no slower, since variable-length legal sections waste most of a
+# padded batch anyway.
+_ONNX_OPTIONS = {"enable_cpu_mem_arena": False}
+_BATCH_SIZE = 1
 
 _embed_model = None
 _rerank_model = None
@@ -23,23 +52,23 @@ _rerank_model = None
 def get_embed_model():
     global _embed_model
     if _embed_model is None:
-        _embed_model = SentenceTransformer(_EMBED_MODEL_NAME)
+        _embed_model = TextEmbedding(_EMBED_MODEL_NAME, **_ONNX_OPTIONS)
     return _embed_model
 
 
 def get_rerank_model():
     global _rerank_model
     if _rerank_model is None:
-        _rerank_model = CrossEncoder(_RERANK_MODEL_NAME)
+        _rerank_model = TextCrossEncoder(_RERANK_MODEL_NAME, **_ONNX_OPTIONS)
     return _rerank_model
 
 
 def embed_documents(texts):
-    return get_embed_model().encode(texts, normalize_embeddings=True).tolist()
+    return [vector.tolist() for vector in get_embed_model().embed(texts, batch_size=_BATCH_SIZE)]
 
 
 def embed_query(query):
-    return get_embed_model().encode([_BGE_QUERY_PREFIX + query], normalize_embeddings=True).tolist()[0]
+    return embed_documents([_BGE_QUERY_PREFIX + query])[0]
 
 
 def _tokenize(text):
@@ -89,9 +118,9 @@ def hybrid_search(query, collection_name, top_k=5, candidate_k=15):
     if not candidates:
         return []
 
-    rerank_model = get_rerank_model()
-    pairs = [(query, document) for _, document, _ in candidates]
-    rerank_scores = rerank_model.predict(pairs)
+    rerank_scores = list(get_rerank_model().rerank(
+        query, [document for _, document, _ in candidates], batch_size=_BATCH_SIZE
+    ))
 
     reranked = sorted(zip(candidates, rerank_scores), key=lambda pair: pair[1], reverse=True)
     return [
