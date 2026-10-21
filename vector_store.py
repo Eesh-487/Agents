@@ -32,7 +32,13 @@ def get_client():
         return _client
 
     try:
-        candidate = chromadb.CloudClient()  # reads CHROMA_API_KEY/TENANT/DATABASE from env
+        # Passed explicitly: chromadb 1.5.x's CloudClient() resolves CHROMA_API_KEY
+        # from env but then sends str(None) as the key, so env-only auth is denied.
+        candidate = chromadb.CloudClient(
+            api_key=os.getenv("CHROMA_API_KEY"),
+            tenant=os.getenv("CHROMA_TENANT"),
+            database=os.getenv("CHROMA_DATABASE"),
+        )
         candidate.list_collections()  # forces a real request - bad creds/no credits only surface here
         _client = candidate
         _using_cloud = True
