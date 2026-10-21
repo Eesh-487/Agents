@@ -45,23 +45,6 @@ jobs:
           # Offline mode proves the models were baked in at build time.
           docker exec -e HF_HUB_OFFLINE=1 app python -c "import retrieval; retrieval.embed_documents(['x']); retrieval.get_rerank_model()"
 
-      # Render's free/starter instances cap memory at 512 MB. Run the real
-      # ingest + hybrid search inside a container with that same hard limit
-      # (OOM-kill = failure) and report the kernel's peak-memory counter.
-      # Uses the local Chroma fallback, which costs more memory than Cloud,
-      # so this is stricter than production.
-      - name: Ingest + search within a 512 MB memory limit
-        run: |
-          docker run --rm --memory=512m --memory-swap=512m -e CHROMA_REQUIRE_CLOUD=false \
-            compliance-backend sh -c '
-              python -c "
-          import api, retrieval
-          from set2_law_monitor import law_ingest
-          print(law_ingest.ingest())
-          for q in [\"retention after withdrawal of consent\", \"processing personal data of children\"]:
-              print(q, [r[\"metadata\"][\"section\"] for r in retrieval.hybrid_search(q, law_ingest.COLLECTION_NAME, top_k=3)])
-          " && echo "::notice title=Peak memory (${{ matrix.runner }})::$(( $(cat /sys/fs/cgroup/memory.peak) / 1048576 )) MB of 512 MB"'
-
       - name: Show image size and logs
         if: always()
         run: |

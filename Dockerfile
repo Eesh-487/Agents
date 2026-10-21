@@ -14,7 +14,6 @@ RUN useradd -m -u 1000 user
 USER user
 ENV HOME=/home/user \
     HF_HOME=/home/user/.cache/huggingface \
-    FASTEMBED_CACHE_PATH=/home/user/.cache/fastembed \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     PYTHONUNBUFFERED=1 \
@@ -25,12 +24,11 @@ WORKDIR /home/user/app
 COPY --chown=user pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Bake the ONNX embedding + reranker models into the image so the first
-# request after a cold start (or sleep, on free hosts) doesn't wait on a
-# download. Loading through retrieval.py keeps the model names in one place;
-# only it and its import are copied here so code edits don't re-download.
-COPY --chown=user retrieval.py vector_store.py ./
-RUN python -c "import retrieval; retrieval.get_embed_model(); retrieval.get_rerank_model()"
+# Bake the embedding + reranker models into the image so the first request
+# after a cold start doesn't wait on a download. Names must match retrieval.py.
+RUN python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; \
+SentenceTransformer('BAAI/bge-small-en-v1.5'); \
+CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
 
 COPY --chown=user . .
 
