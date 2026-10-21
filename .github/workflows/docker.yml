@@ -1,0 +1,51 @@
+# Builds the production image on the same CPU architecture as the deploy
+# target (Oracle Ampere A1 = arm64), starts it, and smoke-tests the API.
+# No secrets: Neo4j/Chroma are expected to report unreachable here; the point
+# is that the image builds, the server boots, and the endpoints respond.
+name: docker
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-smoke-test:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04-arm, ubuntu-24.04]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t compliance-backend .
+
+      - name: Start container
+        run: docker run -d --name app -p 7860:7860 compliance-backend
+
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS localhost:7860/health; then exit 0; fi
+            sleep 2
+          done
+          docker logs app
+          exit 1
+
+      - name: Check /health/dependencies responds
+        run: |
+          curl -fsS --max-time 120 localhost:7860/health/dependencies | tee deps.json
+          grep -q '"neo4j"' deps.json && grep -q '"chroma"' deps.json && grep -q '"llm"' deps.json
+
+      - name: Check runtime tools inside the image
+        run: |
+          docker exec app git --version
+          docker exec app python -c "import retrieval; retrieval.embed_documents(['offline model check'])"
+
+      - name: Show image size and logs
+        if: always()
+        run: |
+          docker images compliance-backend
+          docker logs app || true
