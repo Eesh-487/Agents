@@ -37,3 +37,20 @@ On Apple Silicon the LLM runs locally through MLX. Anywhere else, set
 
 - `GET /health` — liveness.
 - `GET /health/dependencies` — live connectivity to Neo4j, Chroma and the configured LLM.
+
+## Deploy to a single VM (Oracle Cloud Always Free)
+
+1. Create an Ubuntu 24.04 VM (shape `VM.Standard.A1.Flex`, 2 OCPU / 4 GB). In its
+   subnet's security list, add ingress rules for TCP 80 and 443 from `0.0.0.0/0`.
+2. On the VM:
+   ```bash
+   git clone https://github.com/Eesh-487/Agents.git && cd Agents
+   bash deploy/oracle-setup.sh        # Docker + OS firewall; prints a DOMAIN to use
+   exit                               # log back in for the docker group
+   ```
+3. Back on the VM: `cd Agents`, create `.env` from `.env.example` (Neo4j, Chroma, `DOMAIN`), then
+   ```bash
+   docker compose up -d --build
+   curl https://$DOMAIN/health/dependencies
+   ```
+4. Update later with `git pull && docker compose up -d --build`.

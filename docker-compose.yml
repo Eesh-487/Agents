@@ -1,0 +1,32 @@
+# Single-VM production stack: the backend behind Caddy, which obtains and
+# renews a Let's Encrypt certificate for $DOMAIN automatically.
+# Usage (on the server, next to a filled-in .env):  docker compose up -d --build
+services:
+  app:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    expose:
+      - "7860"
+    volumes:
+      # Uploaded documents, policy version history, gap/remediation results.
+      # A named volume is seeded from the image on first start, then persists.
+      - app-data:/home/user/app/data
+
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    command: caddy reverse-proxy --from ${DOMAIN:?set DOMAIN in .env} --to app:7860
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  app-data:
+  caddy-data:
+  caddy-config:
