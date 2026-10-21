@@ -42,7 +42,8 @@ jobs:
       - name: Check runtime tools inside the image
         run: |
           docker exec app git --version
-          docker exec app python -c "import retrieval; retrieval.embed_documents(['offline model check'])"
+          # Offline mode proves the models were baked in at build time.
+          docker exec -e HF_HUB_OFFLINE=1 app python -c "import retrieval; retrieval.embed_documents(['x']); retrieval.get_rerank_model()"
 
       - name: Show image size and logs
         if: always()
